@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Conference Capture</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f1117;
+      color: #e8eaf6;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+    }
+
+    h1 {
+      font-size: 1.8rem;
+      font-weight: 700;
+      margin-bottom: 0.3rem;
+      letter-spacing: -0.5px;
+    }
+    .subtitle { color: #7986cb; font-size: 0.95rem; margin-bottom: 2rem; }
+
+    .card {
+      background: #1a1d2e;
+      border: 1px solid #2a2d3e;
+      border-radius: 16px;
+      padding: 2rem;
+      width: 100%;
+      max-width: 560px;
+      margin-bottom: 1.5rem;
+    }
+
+    label { display: block; font-size: 0.85rem; color: #9fa8da; margin-bottom: 0.4rem; }
+
+    input[type="text"] {
+      width: 100%;
+      background: #0f1117;
+      border: 1px solid #2a2d3e;
+      border-radius: 8px;
+      color: #e8eaf6;
+      font-size: 1rem;
+      padding: 0.65rem 0.9rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input[type="text"]:focus { border-color: #5c6bc0; }
+
+    .rec-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.6rem;
+      width: 100%;
+      padding: 0.85rem;
+      border: none;
+      border-radius: 10px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 1.2rem;
+      transition: background 0.2s, transform 0.1s;
+    }
+    .rec-btn:active { transform: scale(0.98); }
+    .rec-btn.idle   { background: #3949ab; color: #fff; }
+    .rec-btn.recording { background: #b71c1c; color: #fff; }
+    .rec-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    .dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: pulse 1s infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    .timer {
+      text-align: center;
+      font-size: 0.85rem;
+      color: #ef9a9a;
+      margin-top: 0.6rem;
+      min-height: 1.2em;
+    }
+
+    .spinner-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.8rem;
+      padding: 1.5rem 0;
+    }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid #2a2d3e;
+      border-top-color: #5c6bc0;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner-label { color: #7986cb; font-size: 0.9rem; }
+
+    .result-card { display: none; }
+    .result-card.visible { display: block; }
+
+    .field { margin-bottom: 1rem; }
+    .field-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: #5c6bc0; margin-bottom: 0.25rem; }
+    .field-value { font-size: 0.95rem; line-height: 1.5; white-space: pre-wrap; }
+
+    .person-row {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1.2rem;
+    }
+    .person-row .field { flex: 1; margin-bottom: 0; }
+
+    .draft-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: #283593;
+      color: #fff;
+      text-decoration: none;
+      padding: 0.6rem 1.1rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      margin-top: 0.5rem;
+      transition: background 0.2s;
+    }
+    .draft-btn:hover { background: #3949ab; }
+
+    .error-box {
+      background: #311; border: 1px solid #b71c1c;
+      border-radius: 8px; padding: 1rem;
+      font-size: 0.9rem; color: #ef9a9a;
+      display: none;
+    }
+    .error-box.visible { display: block; }
+
+    hr { border: none; border-top: 1px solid #2a2d3e; margin: 1.2rem 0; }
+  </style>
+</head>
+<body>
+
+<h1>Conference Capture</h1>
+<p class="subtitle">Record a voice memo, get a follow-up draft in seconds.</p>
+
+<div class="card">
+  <div class="field">
+    <label for="conference">Conference / Event name</label>
+    <input type="text" id="conference" placeholder="e.g. PyCon 2026" />
+  </div>
+
+  <button class="rec-btn idle" id="recBtn" onclick="toggleRecording()">
+    <span class="dot" id="dot" style="display:none"></span>
+    <span id="recLabel">Start Recording</span>
+  </button>
+  <p class="timer" id="timer"></p>
+</div>
+
+<div class="card" id="processingCard" style="display:none">
+  <div class="spinner-wrap">
+    <div class="spinner"></div>
+    <p class="spinner-label" id="spinnerLabel">Processing…</p>
+  </div>
+</div>
+
+<div class="error-box" id="errorBox"></div>
+
+<div class="card result-card" id="resultCard">
+  <div class="person-row">
+    <div class="field">
+      <div class="field-label">Name</div>
+      <div class="field-value" id="rName"></div>
+    </div>
+    <div class="field">
+      <div class="field-label">Role</div>
+      <div class="field-value" id="rRole"></div>
+    </div>
+    <div class="field">
+      <div class="field-label">Company</div>
+      <div class="field-value" id="rCompany"></div>
+    </div>
+  </div>
+
+  <div class="field">
+    <div class="field-label">Conference</div>
+    <div class="field-value" id="rConference"></div>
+  </div>
+
+  <hr />
+
+  <div class="field">
+    <div class="field-label">Topics</div>
+    <div class="field-value" id="rTopics"></div>
+  </div>
+
+  <div class="field">
+    <div class="field-label">Action Items</div>
+    <div class="field-value" id="rActions"></div>
+  </div>
+
+  <div class="field">
+    <div class="field-label">Summary</div>
+    <div class="field-value" id="rNotes"></div>
+  </div>
+
+  <hr />
+
+  <div class="field">
+    <div class="field-label">Gmail Draft</div>
+    <a class="draft-btn" id="draftLink" href="#" target="_blank">
+      ✉ Open draft in Gmail
+    </a>
+    <p id="draftNote" style="font-size:0.8rem;color:#7986cb;margin-top:0.4rem"></p>
+  </div>
+</div>
+
+<script>
+  let mediaRecorder = null;
+  let chunks = [];
+  let timerInterval = null;
+  let seconds = 0;
+
+  function fmt(s) {
+    const m = Math.floor(s / 60).toString().padStart(2, "0");
+    const sec = (s % 60).toString().padStart(2, "0");
+    return `${m}:${sec}`;
+  }
+
+  async function toggleRecording() {
+    if (mediaRecorder && mediaRecorder.state === "recording") {
+      stopRecording();
+    } else {
+      await startRecording();
+    }
+  }
+
+  async function startRecording() {
+    hideError();
+    hideResult();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      chunks = [];
+      mediaRecorder = new MediaRecorder(stream);
+      mediaRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+      mediaRecorder.onstop = handleStop;
+      mediaRecorder.start();
+
+      seconds = 0;
+      document.getElementById("timer").textContent = fmt(0);
+      timerInterval = setInterval(() => {
+        seconds++;
+        document.getElementById("timer").textContent = fmt(seconds);
+      }, 1000);
+
+      const btn = document.getElementById("recBtn");
+      btn.className = "rec-btn recording";
+      document.getElementById("recLabel").textContent = "Stop Recording";
+      document.getElementById("dot").style.display = "block";
+    } catch (err) {
+      showError("Microphone access denied: " + err.message);
+    }
+  }
+
+  function stopRecording() {
+    if (mediaRecorder) {
+      mediaRecorder.stop();
+      mediaRecorder.stream.getTracks().forEach(t => t.stop());
+    }
+    clearInterval(timerInterval);
+    document.getElementById("timer").textContent = "";
+
+    const btn = document.getElementById("recBtn");
+    btn.className = "rec-btn idle";
+    btn.disabled = true;
+    document.getElementById("recLabel").textContent = "Start Recording";
+    document.getElementById("dot").style.display = "none";
+  }
+
+  async function handleStop() {
+    const blob = new Blob(chunks, { type: "audio/webm" });
+    const conference = document.getElementById("conference").value.trim();
+
+    document.getElementById("processingCard").style.display = "block";
+    setSpinner("Transcribing audio…");
+
+    const form = new FormData();
+    form.append("audio", blob, "recording.webm");
+    form.append("conference", conference);
+
+    try {
+      setSpinner("Analyzing conversation…");
+      const res = await fetch("/conversations", { method: "POST", body: form });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail || res.statusText);
+      }
+      const data = await res.json();
+      document.getElementById("processingCard").style.display = "none";
+      showResult(data);
+    } catch (err) {
+      document.getElementById("processingCard").style.display = "none";
+      showError(err.message);
+    } finally {
+      document.getElementById("recBtn").disabled = false;
+    }
+  }
+
+  function setSpinner(label) {
+    document.getElementById("spinnerLabel").textContent = label;
+  }
+
+  function showResult(d) {
+    document.getElementById("rName").textContent = d.name;
+    document.getElementById("rRole").textContent = d.role;
+    document.getElementById("rCompany").textContent = d.company;
+    document.getElementById("rConference").textContent = d.conference;
+    document.getElementById("rTopics").textContent = d.topics;
+    document.getElementById("rActions").textContent = d.action_items || "—";
+    document.getElementById("rNotes").textContent = d.notes;
+
+    const link = document.getElementById("draftLink");
+    const note = document.getElementById("draftNote");
+    if (d.gmail_draft_url) {
+      link.href = d.gmail_draft_url;
+      link.style.display = "inline-flex";
+      note.textContent = "Saved to Google Sheets ✓";
+    } else {
+      link.style.display = "none";
+      note.textContent = "Gmail draft could not be created (check server logs).";
+    }
+
+    document.getElementById("resultCard").classList.add("visible");
+    document.getElementById("resultCard").scrollIntoView({ behavior: "smooth" });
+  }
+
+  function hideResult() {
+    document.getElementById("resultCard").classList.remove("visible");
+  }
+
+  function showError(msg) {
+    const box = document.getElementById("errorBox");
+    box.textContent = "Error: " + msg;
+    box.classList.add("visible");
+  }
+
+  function hideError() {
+    document.getElementById("errorBox").classList.remove("visible");
+  }
+</script>
+</body>
+</html>
