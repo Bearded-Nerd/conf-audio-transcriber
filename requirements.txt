@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+python-multipart
+anthropic
+openai
+google-api-python-client
+google-auth-oauthlib
+python-dotenv
+pydantic
