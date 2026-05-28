@@ -1,11 +1,13 @@
 import os
+import secrets
 import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
+from fastapi.security import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
 
 from conference_capture.analyzer import analyze
@@ -16,6 +18,14 @@ from conference_capture.transcriber import transcribe
 
 load_dotenv()
 
+_api_key_header = APIKeyHeader(name="X-API-Key")
+
+
+def _require_api_key(key: str = Depends(_api_key_header)):
+    expected = os.environ.get("APP_API_KEY", "")
+    if not expected or not secrets.compare_digest(key, expected):
+        raise HTTPException(status_code=403, detail="Invalid API key")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -24,7 +34,7 @@ async def lifespan(app: FastAPI):
 
 
 def _check_env():
-    required = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_SHEETS_ID"]
+    required = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_SHEETS_ID", "APP_API_KEY"]
     missing = [k for k in required if not os.environ.get(k)]
     if missing:
         raise RuntimeError(f"Missing required env vars: {', '.join(missing)}")
@@ -44,7 +54,7 @@ async def health():
     return {"status": "ok"}
 
 
-@app.post("/conversations", response_model=ConversationRecord)
+@app.post("/conversations", response_model=ConversationRecord, dependencies=[Depends(_require_api_key)])
 async def capture_conversation(
     audio: UploadFile = File(...),
     conference: str = Form(default=""),

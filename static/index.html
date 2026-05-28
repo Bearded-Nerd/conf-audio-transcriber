@@ -143,12 +143,52 @@
     .error-box.visible { display: block; }
 
     hr { border: none; border-top: 1px solid #2a2d3e; margin: 1.2rem 0; }
+
+    input[type="password"] {
+      width: 100%;
+      background: #0f1117;
+      border: 1px solid #2a2d3e;
+      border-radius: 8px;
+      color: #e8eaf6;
+      font-size: 1rem;
+      padding: 0.65rem 0.9rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input[type="password"]:focus { border-color: #5c6bc0; }
+
+    .key-card { text-align: center; }
+    .key-card h2 { font-size: 1.1rem; margin-bottom: 0.4rem; }
+    .key-card p { font-size: 0.85rem; color: #7986cb; margin-bottom: 1.2rem; }
+    .save-btn {
+      width: 100%; padding: 0.75rem; border: none; border-radius: 8px;
+      background: #3949ab; color: #fff; font-size: 1rem; font-weight: 600;
+      cursor: pointer; margin-top: 0.8rem;
+    }
+    .save-btn:hover { background: #5c6bc0; }
+    .change-key {
+      font-size: 0.75rem; color: #5c6bc0; cursor: pointer;
+      text-decoration: underline; background: none; border: none;
+      margin-top: 1.5rem; display: block; margin-left: auto; margin-right: auto;
+    }
   </style>
 </head>
 <body>
 
 <h1>Conference Capture</h1>
 <p class="subtitle">Record a voice memo, get a follow-up draft in seconds.</p>
+
+<!-- Access key gate -->
+<div class="card key-card" id="keyCard">
+  <h2>Enter your access key</h2>
+  <p>Set once — saved in your browser.</p>
+  <label for="apiKeyInput">Access key</label>
+  <input type="password" id="apiKeyInput" placeholder="Paste your APP_API_KEY here" />
+  <button class="save-btn" onclick="saveKey()">Save &amp; Continue</button>
+</div>
+
+<!-- Main UI (hidden until key is set) -->
+<div id="mainUI" style="display:none; width:100%; display:none; flex-direction:column; align-items:center">
 
 <div class="card">
   <div class="field">
@@ -221,7 +261,41 @@
   </div>
 </div>
 
+</div> <!-- end #mainUI -->
+
+<button class="change-key" id="changeKeyBtn" onclick="changeKey()" style="display:none">Change access key</button>
+
 <script>
+  // --- Access key gate ---
+  function saveKey() {
+    const val = document.getElementById("apiKeyInput").value.trim();
+    if (!val) return;
+    localStorage.setItem("cc_api_key", val);
+    showMain();
+  }
+
+  function changeKey() {
+    localStorage.removeItem("cc_api_key");
+    document.getElementById("mainUI").style.display = "none";
+    document.getElementById("keyCard").style.display = "block";
+    document.getElementById("changeKeyBtn").style.display = "none";
+    document.getElementById("apiKeyInput").value = "";
+  }
+
+  function showMain() {
+    document.getElementById("keyCard").style.display = "none";
+    document.getElementById("mainUI").style.display = "flex";
+    document.getElementById("changeKeyBtn").style.display = "block";
+  }
+
+  function getKey() {
+    return localStorage.getItem("cc_api_key") || "";
+  }
+
+  // On load: show main if key already stored
+  if (getKey()) showMain();
+
+  // --- Recording ---
   let mediaRecorder = null;
   let chunks = [];
   let timerInterval = null;
@@ -296,7 +370,11 @@
 
     try {
       setSpinner("Analyzing conversation…");
-      const res = await fetch("/conversations", { method: "POST", body: form });
+      const res = await fetch("/conversations", {
+        method: "POST",
+        headers: { "X-API-Key": getKey() },
+        body: form,
+      });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: res.statusText }));
         throw new Error(err.detail || res.statusText);
